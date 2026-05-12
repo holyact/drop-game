@@ -8,9 +8,25 @@
     <script src="https://cdn.tailwindcss.com"></script>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;700&display=swap" rel="stylesheet">
     <style>
+        :root {
+            --bg-body: #0f172a;
+            --bg-container: linear-gradient(to bottom, #1e293b, #0f172a);
+            --text-main: #ffffff;
+            --text-sub: #94a3b8;
+            --border-color: #334155;
+        }
+
+        body.light-mode {
+            --bg-body: #f8fafc;
+            --bg-container: linear-gradient(to bottom, #e2e8f0, #f8fafc);
+            --text-main: #1e293b;
+            --text-sub: #475569;
+            --border-color: #cbd5e1;
+        }
+
         body {
             font-family: 'Inter', sans-serif;
-            background-color: #0f172a;
+            background-color: var(--bg-body);
             margin: 0;
             overflow: hidden;
             display: flex;
@@ -18,6 +34,7 @@
             align-items: center;
             height: 100vh;
             touch-action: none;
+            transition: background-color 0.3s ease;
         }
 
         #game-container {
@@ -25,11 +42,12 @@
             width: 100%;
             max-width: 600px;
             height: 80vh;
-            background: linear-gradient(to bottom, #1e293b, #0f172a);
+            background: var(--bg-container);
             border-radius: 1rem;
             box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5);
             overflow: hidden;
-            border: 2px solid #334155;
+            border: 2px solid var(--border-color);
+            transition: all 0.3s ease;
         }
 
         canvas {
@@ -49,7 +67,30 @@
             flex-direction: column;
             justify-content: center;
             align-items: center;
-            color: white;
+            color: var(--text-main);
+        }
+
+        /* 테마 토글 버튼 스타일 */
+        #theme-toggle {
+            position: absolute;
+            top: 1rem;
+            right: 1rem;
+            z-index: 50;
+            background: rgba(255, 255, 255, 0.1);
+            border-radius: 50%;
+            padding: 0.5rem;
+            cursor: pointer;
+            pointer-events: auto;
+            transition: all 0.2s ease;
+            border: 1px solid var(--border-color);
+        }
+
+        body.light-mode #theme-toggle {
+            background: rgba(0, 0, 0, 0.05);
+        }
+
+        #theme-toggle:hover {
+            transform: scale(1.1);
         }
     </style>
 </head>
@@ -57,11 +98,34 @@
 <body>
 
     <div id="game-container">
+        <!-- 테마 토글 버튼 -->
+        <button id="theme-toggle" aria-label="테마 변경">
+            <!-- 달 아이콘 (다크모드일 때 보임) -->
+            <svg id="moon-icon" xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24"
+                fill="none" stroke="#fbbf24" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"></path>
+            </svg>
+            <!-- 해 아이콘 (라이트모드일 때 보임) -->
+            <svg id="sun-icon" class="hidden" xmlns="http://www.w3.org/2000/svg" width="24" height="24"
+                viewBox="0 0 24 24" fill="none" stroke="#f59e0b" stroke-width="2" stroke-linecap="round"
+                stroke-linejoin="round">
+                <circle cx="12" cy="12" r="5"></circle>
+                <line x1="12" y1="1" x2="12" y2="3"></line>
+                <line x1="12" y1="21" x2="12" y2="23"></line>
+                <line x1="4.22" y1="4.22" x2="5.64" y2="5.64"></line>
+                <line x1="18.36" y1="18.36" x2="19.78" y2="19.78"></line>
+                <line x1="1" y1="12" x2="3" y2="12"></line>
+                <line x1="21" y1="12" x2="23" y2="12"></line>
+                <line x1="4.22" y1="19.78" x2="5.64" y2="18.36"></line>
+                <line x1="18.36" y1="5.64" x2="19.78" y2="4.22"></line>
+            </svg>
+        </button>
+
         <canvas id="gameCanvas"></canvas>
 
         <div class="ui-layer" id="ui-start">
             <h1 class="text-4xl font-bold mb-4 drop-shadow-lg text-orange-500">Rain Dodge</h1>
-            <p class="mb-6 text-slate-400 text-center px-4">좌우 화살표 키나 화면 터치로<br>떨어지는 장애물을 피하세요!</p>
+            <p class="mb-6 text-center px-4" style="color: var(--text-sub);">좌우 화살표 키나 화면 터치로<br>떨어지는 장애물을 피하세요!</p>
             <button id="startBtn"
                 class="pointer-events-auto bg-green-600 hover:bg-green-500 text-white px-8 py-3 rounded-full font-bold transition-all transform hover:scale-105 active:scale-95 shadow-lg">
                 게임 시작
@@ -77,7 +141,8 @@
             </button>
         </div>
 
-        <div class="absolute top-4 left-4 text-white text-xl font-bold opacity-80" id="scoreDisplay">
+        <div class="absolute top-4 left-4 text-xl font-bold opacity-80" id="scoreDisplay"
+            style="color: var(--text-main);">
             Score: 0
         </div>
     </div>
@@ -89,8 +154,24 @@
         const uiGameOver = document.getElementById('ui-gameover');
         const scoreDisplay = document.getElementById('scoreDisplay');
         const finalScoreDisplay = document.getElementById('finalScore');
+        const themeToggle = document.getElementById('theme-toggle');
+        const moonIcon = document.getElementById('moon-icon');
+        const sunIcon = document.getElementById('sun-icon');
 
-        // 게임 설정값 (학생들이 이 부분을 수정하며 Git 실습하기 좋습니다)
+        // 테마 전환 로직
+        themeToggle.addEventListener('click', () => {
+            document.body.classList.toggle('light-mode');
+            const isLight = document.body.classList.contains('light-mode');
+
+            if (isLight) {
+                moonIcon.classList.add('hidden');
+                sunIcon.classList.remove('hidden');
+            } else {
+                moonIcon.classList.remove('hidden');
+                sunIcon.classList.add('hidden');
+            }
+        });
+
         const CONFIG = {
             FPS: 60,
             PLAYER_SIZE: 40,
@@ -99,7 +180,7 @@
             ENEMY_MAX_SIZE: 50,
             ENEMY_MIN_SPEED: 3,
             ENEMY_MAX_SPEED: 8,
-            SPAWN_RATE: 0.05 // 장애물 생성 확률
+            SPAWN_RATE: 0.05
         };
 
         let score = 0;
@@ -109,7 +190,6 @@
         let enemies = [];
         let animationId = null;
 
-        // 반응형 캔버스 크기 조절
         function resize() {
             canvas.width = canvas.offsetWidth;
             canvas.height = canvas.offsetHeight;
@@ -130,24 +210,19 @@
 
             draw() {
                 ctx.fillStyle = this.color;
-                // 둥근 사각형 플레이어
                 const radius = 8;
                 ctx.beginPath();
                 ctx.roundRect(this.x, this.y, this.width, this.height, radius);
                 ctx.fill();
 
-                // 플레이어 눈 장식
                 ctx.fillStyle = 'white';
                 ctx.fillRect(this.x + 8, this.y + 10, 6, 6);
                 ctx.fillRect(this.x + this.width - 14, this.y + 10, 6, 6);
             }
 
             update() {
-                // 키보드 입력 또는 터치 이동 부드럽게 추종
                 const dx = this.targetX - this.x;
                 this.x += dx * 0.2;
-
-                // 경계 제한
                 if (this.x < 0) this.x = 0;
                 if (this.x + this.width > canvas.width) this.x = canvas.width - this.width;
             }
@@ -159,7 +234,7 @@
                 this.x = Math.random() * (canvas.width - this.size);
                 this.y = -this.size;
                 this.speed = Math.random() * (CONFIG.ENEMY_MAX_SPEED - CONFIG.ENEMY_MIN_SPEED) + CONFIG.ENEMY_MIN_SPEED;
-                this.color = `hsl(${Math.random() * 40 + 0}, 70%, 60%)`; // 붉은색 계열
+                this.color = `hsl(${Math.random() * 40 + 0}, 70%, 60%)`;
             }
 
             draw() {
@@ -178,7 +253,6 @@
         window.addEventListener('keydown', (e) => keys[e.code] = true);
         window.addEventListener('keyup', (e) => keys[e.code] = false);
 
-        // 마우스 및 터치 제어
         canvas.addEventListener('mousemove', (e) => {
             if (!isPlaying) return;
             const rect = canvas.getBoundingClientRect();
@@ -208,8 +282,6 @@
 
         function update() {
             if (isGameOver) return;
-
-            // 키보드 조작
             if (keys['ArrowLeft']) player.targetX -= CONFIG.PLAYER_SPEED;
             if (keys['ArrowRight']) player.targetX += CONFIG.PLAYER_SPEED;
 
@@ -218,14 +290,10 @@
 
             for (let i = enemies.length - 1; i >= 0; i--) {
                 enemies[i].update();
-
-                // 충돌 감지
                 if (checkCollision(player, enemies[i])) {
                     endGame();
                     return;
                 }
-
-                // 화면 밖으로 나가면 제거 및 점수 획득
                 if (enemies[i].y > canvas.height) {
                     enemies.splice(i, 1);
                     score += 10;
@@ -237,8 +305,9 @@
         function draw() {
             ctx.clearRect(0, 0, canvas.width, canvas.height);
 
-            // 배경 효과 (약간의 먼지/비 효과)
-            ctx.fillStyle = 'rgba(255, 255, 255, 0.05)';
+            // 배경 입자 효과 (테마에 따라 색상 변경)
+            const isLight = document.body.classList.contains('light-mode');
+            ctx.fillStyle = isLight ? 'rgba(0, 0, 0, 0.05)' : 'rgba(255, 255, 255, 0.05)';
             for (let i = 0; i < 5; i++) {
                 ctx.fillRect(Math.random() * canvas.width, Math.random() * canvas.height, 2, 2);
             }
@@ -277,10 +346,9 @@
         document.getElementById('startBtn').addEventListener('click', startGame);
         document.getElementById('restartBtn').addEventListener('click', startGame);
 
-        // 초기 화면 그리기
         window.onload = () => {
             resize();
-            ctx.fillStyle = 'rgba(255, 255, 255, 0.1)';
+            ctx.fillStyle = 'rgba(128, 128, 128, 0.5)';
             ctx.textAlign = 'center';
             ctx.font = '20px Inter';
             ctx.fillText('Ready?', canvas.width / 2, canvas.height / 2);
