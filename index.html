@@ -1,0 +1,292 @@
+<!DOCTYPE html>
+<html lang="ko">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Dodge Game - Git 실습용</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;700&display=swap" rel="stylesheet">
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #0f172a;
+            margin: 0;
+            overflow: hidden;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            touch-action: none;
+        }
+
+        #game-container {
+            position: relative;
+            width: 100%;
+            max-width: 600px;
+            height: 80vh;
+            background: linear-gradient(to bottom, #1e293b, #0f172a);
+            border-radius: 1rem;
+            box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5);
+            overflow: hidden;
+            border: 2px solid #334155;
+        }
+
+        canvas {
+            display: block;
+            width: 100%;
+            height: 100%;
+        }
+
+        .ui-layer {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            pointer-events: none;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            color: white;
+        }
+    </style>
+</head>
+
+<body>
+
+    <div id="game-container">
+        <canvas id="gameCanvas"></canvas>
+
+        <div class="ui-layer" id="ui-start">
+            <h1 class="text-4xl font-bold mb-4 drop-shadow-lg text-blue-400">Rain Dodge</h1>
+            <p class="mb-6 text-slate-400 text-center px-4">좌우 화살표 키나 화면 터치로<br>떨어지는 장애물을 피하세요!</p>
+            <button id="startBtn"
+                class="pointer-events-auto bg-blue-600 hover:bg-blue-500 text-white px-8 py-3 rounded-full font-bold transition-all transform hover:scale-105 active:scale-95 shadow-lg">
+                게임 시작
+            </button>
+        </div>
+
+        <div class="ui-layer hidden" id="ui-gameover">
+            <h2 class="text-5xl font-bold mb-2 text-red-500">Game Over</h2>
+            <p id="finalScore" class="text-2xl mb-8 font-semibold">Score: 0</p>
+            <button id="restartBtn"
+                class="pointer-events-auto bg-slate-700 hover:bg-slate-600 text-white px-8 py-3 rounded-full font-bold transition-all shadow-lg">
+                다시 시도
+            </button>
+        </div>
+
+        <div class="absolute top-4 left-4 text-white text-xl font-bold opacity-80" id="scoreDisplay">
+            Score: 0
+        </div>
+    </div>
+
+    <script>
+        const canvas = document.getElementById('gameCanvas');
+        const ctx = canvas.getContext('2d');
+        const uiStart = document.getElementById('ui-start');
+        const uiGameOver = document.getElementById('ui-gameover');
+        const scoreDisplay = document.getElementById('scoreDisplay');
+        const finalScoreDisplay = document.getElementById('finalScore');
+
+        // 게임 설정값 (학생들이 이 부분을 수정하며 Git 실습하기 좋습니다)
+        const CONFIG = {
+            FPS: 60,
+            PLAYER_SIZE: 40,
+            PLAYER_SPEED: 7,
+            ENEMY_MIN_SIZE: 20,
+            ENEMY_MAX_SIZE: 50,
+            ENEMY_MIN_SPEED: 3,
+            ENEMY_MAX_SPEED: 8,
+            SPAWN_RATE: 0.05 // 장애물 생성 확률
+        };
+
+        let score = 0;
+        let isGameOver = false;
+        let isPlaying = false;
+        let player = null;
+        let enemies = [];
+        let animationId = null;
+
+        // 반응형 캔버스 크기 조절
+        function resize() {
+            canvas.width = canvas.offsetWidth;
+            canvas.height = canvas.offsetHeight;
+            if (player) player.y = canvas.height - CONFIG.PLAYER_SIZE - 20;
+        }
+        window.addEventListener('resize', resize);
+        resize();
+
+        class Player {
+            constructor() {
+                this.width = CONFIG.PLAYER_SIZE;
+                this.height = CONFIG.PLAYER_SIZE;
+                this.x = canvas.width / 2 - this.width / 2;
+                this.y = canvas.height - this.height - 20;
+                this.color = '#60a5fa';
+                this.targetX = this.x;
+            }
+
+            draw() {
+                ctx.fillStyle = this.color;
+                // 둥근 사각형 플레이어
+                const radius = 8;
+                ctx.beginPath();
+                ctx.roundRect(this.x, this.y, this.width, this.height, radius);
+                ctx.fill();
+
+                // 플레이어 눈 장식
+                ctx.fillStyle = 'white';
+                ctx.fillRect(this.x + 8, this.y + 10, 6, 6);
+                ctx.fillRect(this.x + this.width - 14, this.y + 10, 6, 6);
+            }
+
+            update() {
+                // 키보드 입력 또는 터치 이동 부드럽게 추종
+                const dx = this.targetX - this.x;
+                this.x += dx * 0.2;
+
+                // 경계 제한
+                if (this.x < 0) this.x = 0;
+                if (this.x + this.width > canvas.width) this.x = canvas.width - this.width;
+            }
+        }
+
+        class Enemy {
+            constructor() {
+                this.size = Math.random() * (CONFIG.ENEMY_MAX_SIZE - CONFIG.ENEMY_MIN_SIZE) + CONFIG.ENEMY_MIN_SIZE;
+                this.x = Math.random() * (canvas.width - this.size);
+                this.y = -this.size;
+                this.speed = Math.random() * (CONFIG.ENEMY_MAX_SPEED - CONFIG.ENEMY_MIN_SPEED) + CONFIG.ENEMY_MIN_SPEED;
+                this.color = `hsl(${Math.random() * 40 + 0}, 70%, 60%)`; // 붉은색 계열
+            }
+
+            draw() {
+                ctx.fillStyle = this.color;
+                ctx.beginPath();
+                ctx.arc(this.x + this.size / 2, this.y + this.size / 2, this.size / 2, 0, Math.PI * 2);
+                ctx.fill();
+            }
+
+            update() {
+                this.y += this.speed;
+            }
+        }
+
+        const keys = {};
+        window.addEventListener('keydown', (e) => keys[e.code] = true);
+        window.addEventListener('keyup', (e) => keys[e.code] = false);
+
+        // 마우스 및 터치 제어
+        canvas.addEventListener('mousemove', (e) => {
+            if (!isPlaying) return;
+            const rect = canvas.getBoundingClientRect();
+            player.targetX = e.clientX - rect.left - player.width / 2;
+        });
+
+        canvas.addEventListener('touchmove', (e) => {
+            if (!isPlaying) return;
+            e.preventDefault();
+            const rect = canvas.getBoundingClientRect();
+            const touch = e.touches[0];
+            player.targetX = touch.clientX - rect.left - player.width / 2;
+        }, { passive: false });
+
+        function spawnEnemy() {
+            if (Math.random() < CONFIG.SPAWN_RATE) {
+                enemies.push(new Enemy());
+            }
+        }
+
+        function checkCollision(p, e) {
+            return p.x < e.x + e.size &&
+                p.x + p.width > e.x &&
+                p.y < e.y + e.size &&
+                p.y + p.height > e.y;
+        }
+
+        function update() {
+            if (isGameOver) return;
+
+            // 키보드 조작
+            if (keys['ArrowLeft']) player.targetX -= CONFIG.PLAYER_SPEED;
+            if (keys['ArrowRight']) player.targetX += CONFIG.PLAYER_SPEED;
+
+            player.update();
+            spawnEnemy();
+
+            for (let i = enemies.length - 1; i >= 0; i--) {
+                enemies[i].update();
+
+                // 충돌 감지
+                if (checkCollision(player, enemies[i])) {
+                    endGame();
+                    return;
+                }
+
+                // 화면 밖으로 나가면 제거 및 점수 획득
+                if (enemies[i].y > canvas.height) {
+                    enemies.splice(i, 1);
+                    score += 10;
+                    scoreDisplay.innerText = `Score: ${score}`;
+                }
+            }
+        }
+
+        function draw() {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+            // 배경 효과 (약간의 먼지/비 효과)
+            ctx.fillStyle = 'rgba(255, 255, 255, 0.05)';
+            for (let i = 0; i < 5; i++) {
+                ctx.fillRect(Math.random() * canvas.width, Math.random() * canvas.height, 2, 2);
+            }
+
+            player.draw();
+            enemies.forEach(enemy => enemy.draw());
+        }
+
+        function gameLoop() {
+            update();
+            draw();
+            animationId = requestAnimationFrame(gameLoop);
+        }
+
+        function startGame() {
+            isPlaying = true;
+            isGameOver = false;
+            score = 0;
+            enemies = [];
+            player = new Player();
+            scoreDisplay.innerText = `Score: 0`;
+            uiStart.classList.add('hidden');
+            uiGameOver.classList.add('hidden');
+            resize();
+            gameLoop();
+        }
+
+        function endGame() {
+            isGameOver = true;
+            isPlaying = false;
+            cancelAnimationFrame(animationId);
+            finalScoreDisplay.innerText = `Score: ${score}`;
+            uiGameOver.classList.remove('hidden');
+        }
+
+        document.getElementById('startBtn').addEventListener('click', startGame);
+        document.getElementById('restartBtn').addEventListener('click', startGame);
+
+        // 초기 화면 그리기
+        window.onload = () => {
+            resize();
+            ctx.fillStyle = 'rgba(255, 255, 255, 0.1)';
+            ctx.textAlign = 'center';
+            ctx.font = '20px Inter';
+            ctx.fillText('Ready?', canvas.width / 2, canvas.height / 2);
+        };
+    </script>
+
+</body>
+
+</html>
